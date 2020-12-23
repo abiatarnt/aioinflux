@@ -17,34 +17,24 @@ logger = logging.getLogger('aioinflux')
 
 class DefaultResponseHandler:
     """A Helper class to facilitate response handling
-
-    Arguments:
-        :param read: If True, Content of response is read.
     """
-    def __init__(self, read: Optional[bool] = True):
-        self.read = read
-
-    async def __call__(self, resp: aiohttp.ClientResponse) -> tuple:
+    async def __call__(self, resp: aiohttp.ClientResponse) -> bytes:
         """Process response"""
-        payload = None
-        if self.read:
-            payload = await resp.read()
-        logger.debug(f'{resp.status}: {resp.reason}')
-        return resp, payload
+        payload = await resp.read()
+        return payload
 
 
-class JsonHandler(DefaultResponseHandler):
+class JsonHandler:
     def __init__(self, ok=200, parser=json.loads):
-        super().__init__(read=True)
         self.parser = parser
         self.ok = ok
 
     async def __call__(self, resp):
-        resp, payload = await super().__call__(resp)
+        payload = await resp.read()
         retval = self.parser(payload)
         if resp.status != self.ok:
             raise RuntimeError(retval, resp.status)
-        return resp, retval
+        return retval
 
 
 class InfluxDB2Client:
@@ -216,7 +206,7 @@ class InfluxDB2Client:
                   params: Optional[dict] = None,
                   data: Optional[dict] = None,
                   handler: Optional[Callable[[aiohttp.ClientResponse], Awaitable]]
-                  = DefaultResponseHandler(read=True)):
+                  = DefaultResponseHandler()):
         if not self._session:
             await self.create_session()
         url = self.url.format(endpoint=endpoint)
@@ -225,8 +215,12 @@ class InfluxDB2Client:
                                          headers=headers,
                                          params=params,
                                          data=data) as resp:
-            result = await handler(resp)
-            return result
+            logger.debug(f'{resp.status}: {resp.reason}')
+            if handler is not None:
+                content = await handler(resp)
+            else:
+                content = None
+            return resp, content
 
     @runner
     async def ping(self) -> dict:
@@ -234,9 +228,7 @@ class InfluxDB2Client:
 
         Returns a dictionary containing the headers of the response from ``influxd``.
         """
-        resp, payload = await self.req("get",
-                                       "health",
-                                       handler=DefaultResponseHandler(False))
+        resp, payload = await self.req("get", "health", handler=None)
         return dict(resp.headers.items())
 
     @runner
@@ -299,7 +291,7 @@ class InfluxDB2Client:
                                        headers=headers,
                                        params=params,
                                        data=data,
-                                       handler=DefaultResponseHandler(False))
+                                       handler=None)
         if resp.status != 204:
             raise InfluxDBWriteError(resp)
         return True
