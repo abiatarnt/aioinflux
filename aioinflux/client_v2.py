@@ -15,13 +15,11 @@ from .compat import *
 logger = logging.getLogger('aioinflux')
 
 
-class DefaultResponseHandler:
-    """A Helper class to facilitate response handling
+async def default_resp_handler(resp: aiohttp.ClientResponse) -> bytes:
+    """Helper facilitating response handling
     """
-    async def __call__(self, resp: aiohttp.ClientResponse) -> bytes:
-        """Process response"""
-        payload = await resp.read()
-        return payload
+    payload = await resp.read()
+    return payload
 
 
 class JsonHandler:
@@ -206,7 +204,7 @@ class InfluxDB2Client:
                   params: Optional[dict] = None,
                   data: Optional[dict] = None,
                   handler: Optional[Callable[[aiohttp.ClientResponse], Awaitable]]
-                  = DefaultResponseHandler()):
+                  = default_resp_handler):
         if not self._session:
             await self.create_session()
         url = self.url.format(endpoint=endpoint)
