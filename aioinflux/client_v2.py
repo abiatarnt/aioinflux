@@ -213,7 +213,6 @@ class InfluxDB2Client:
                                          headers=headers,
                                          params=params,
                                          data=data) as resp:
-            logger.debug(f'{resp.status}: {resp.reason}')
             if handler is not None:
                 content = await handler(resp)
             else:
